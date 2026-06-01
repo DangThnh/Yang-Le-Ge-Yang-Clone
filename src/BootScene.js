@@ -27,6 +27,23 @@ class BootScene extends Phaser.Scene {
         this.load.image('carrot', 'carrot.png');
         this.load.image('grape', 'grape.png');
         this.load.image('watermelon', 'watermelon.png');
+        this.load.image('cow', 'cow.png');
+        this.load.image('tractor', 'tractor.png');
+        this.load.image('wheat', 'wheat.png');
+        this.load.image('barn', 'barn.png');
+        this.load.image('chicken', 'chicken.png');
+
+         // DÙNG LẠI TÀI NGUYÊN JUMP JUMP
+        this.load.image('dust', 'dust.png'); 
+        
+
+        this.load.setPath('assets/audio/');
+        this.load.audio('sfx_land', 'land.mp3');         // Tiếng bốc bài xuống khay
+        this.load.audio('sfx_perfect', 'perfect.mp3');   // Tiếng nổ bài Match-3
+        this.load.audio('sfx_gameover', 'gameover.mp3'); // Tiếng thua
+
+        this.load.setPath(''); 
+        this.load.json('levelData', 'assets/levels/level_data.json');
     }
 
     create() {
