@@ -102,7 +102,7 @@ class GameScene extends Phaser.Scene {
                 
                 // Trượt tọa độ Y của các lá tầng trên xuống dưới 5px để lộ viền lá bên dưới
                 pile.forEach((p, index) => {
-                    p.y += (index * 5); 
+                    p.y += (index * 8); 
                 });
             }
         }
@@ -116,21 +116,54 @@ class GameScene extends Phaser.Scene {
 
     // (XÓA HÀM createLayoutStructure CŨ ĐI VÌ CHÚNG TA ĐÃ DÙNG JSON RỒI)
 
-    generateSolvableMap() {
+   generateSolvableMap() {
         const iconTypes = [
             'apple', 'banana', 'carrot', 'grape', 'watermelon',
             'cow', 'tractor', 'wheat', 'barn', 'chicken'
         ];
 
         let emptyPoints = [...this.mapLayout];
+        
+        // Sắp xếp các điểm trống theo Z từ cao xuống thấp (Để ưu tiên bốc từ trên đỉnh)
+        emptyPoints.sort((a, b) => b.z - a.z);
+
+        // Đọc độ khó từ JSON (Nếu không có mặc định là 5)
+        let difficulty = this.levelConfig.difficulty || 5;
 
         while (emptyPoints.length >= 3) {
             let randomIcon = iconTypes[Math.floor(Math.random() * iconTypes.length)];
+            let chosenPoints = [];
 
-            for (let i = 0; i < 3; i++) {
-                let randomIndex = Math.floor(Math.random() * emptyPoints.length);
-                let point = emptyPoints.splice(randomIndex, 1)[0];
-                point.icon = randomIcon;
+            // Chọn điểm ĐẦU TIÊN (Ưu tiên lấy ở lớp Z cao nhất hiện tại)
+            let p1Index = 0; 
+            chosenPoints.push(emptyPoints.splice(p1Index, 1)[0]);
+
+            // DỰA VÀO ĐỘ KHÓ ĐỂ QUYẾT ĐỊNH 2 ĐIỂM CÒN LẠI SẼ NẰM Ở ĐÂU
+            for (let i = 0; i < 2; i++) {
+                let pIndex = 0;
+
+                // Tung xúc xắc độ khó (Tối đa 10)
+                // Ví dụ Màn 1 (Diff = 1): Xác suất 90% là chọn điểm ngay sát điểm đầu tiên (Cùng lớp Z).
+                // Màn 5 (Diff = 10): Xác suất 100% là nó sẽ bốc mẹ 1 điểm rác ở tít Tầng Z=0 hoặc Z=-1 để giam bài!
+                let roll = Math.random() * 10;
+                
+                if (roll > difficulty) {
+                    // DỄ: Bốc điểm gần nhất (Cùng Z hoặc Z chênh lệch 1)
+                    pIndex = 0; // Lấy điểm ngay đầu mảng (Z cao)
+                } else {
+                    // KHÓ: Bốc một điểm ngẫu nhiên tít dưới đáy mảng (Z thấp)
+                    pIndex = Math.floor(Math.random() * emptyPoints.length);
+                }
+
+                chosenPoints.push(emptyPoints.splice(pIndex, 1)[0]);
+            }
+
+            // Gán icon cho 3 điểm đã bốc
+            chosenPoints.forEach(p => p.icon = randomIcon);
+            
+            // Xáo trộn lại một chút mảng emptyPoints để tránh quy luật quá dập khuôn
+            if (Math.random() > 0.5) {
+                emptyPoints.sort((a, b) => b.z - a.z);
             }
         }
 
@@ -210,7 +243,7 @@ class GameScene extends Phaser.Scene {
                     let distanceX = Math.abs(tileA.x - tileB.x);
                     let distanceY = Math.abs(tileA.y - tileB.y);
                     
-                    if (distanceX < (this.TILE_WIDTH - 2) && distanceY < (this.TILE_HEIGHT - 2)) {
+                    if (distanceX < (this.TILE_WIDTH - 0.5) && distanceY < (this.TILE_HEIGHT - 0.5)) {
                         isLocked = true;
                         break;
                     }
