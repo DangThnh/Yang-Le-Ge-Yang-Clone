@@ -145,6 +145,39 @@ class GameScene extends Phaser.Scene {
     //     });
     // }
 
+    createSharePopup() {
+        // Tạo container và đẩy nó lên tận Depth 9999 để đảm bảo đè lên mọi thứ
+        this.sharePopup = this.add.container(0, 0).setDepth(9999).setVisible(false);
+        
+        let bg = this.add.rectangle(270, 480, 540, 960, 0x000000, 0.8).setInteractive(); 
+        let panel = this.add.rectangle(270, 480, 400, 250, 0xffffff, 1).setStrokeStyle(4, 0x000000);
+        let title = this.add.text(270, 400, 'HẾT LƯỢT MIỄN PHÍ!', { fontSize: '24px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5);
+        let desc = this.add.text(270, 450, 'Hãy Copy link game và chia sẻ\ncho bạn bè để nhận 1 lượt\ntrợ giúp ngay lập tức!', { fontSize: '18px', fill: '#333', align: 'center' }).setOrigin(0.5);
+        
+        let btnCopy = this.add.rectangle(270, 520, 200, 50, 0x4caf50).setInteractive({ useHandCursor: true });
+        let textCopy = this.add.text(270, 520, 'COPY LINK', { fontSize: '18px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+        
+        let btnClose = this.add.text(270, 570, 'Bỏ qua', { fontSize: '16px', fill: '#888' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        this.sharePopup.add([bg, panel, title, desc, btnCopy, textCopy, btnClose]);
+
+        btnClose.on('pointerdown', () => {
+            this.sharePopup.setVisible(false);
+            this.pendingShareBooster = null; 
+            textCopy.setText('COPY LINK'); // Reset lại text
+            btnCopy.setFillStyle(0x4caf50); // Reset lại màu xanh
+        });
+
+        btnCopy.on('pointerdown', () => {
+            let gameLink = "https://dangthnh.github.io/Yang-Le-Ge-Yang-Clone/"; 
+            navigator.clipboard.writeText(gameLink).then(() => {
+                textCopy.setText('ĐÃ COPY!');
+                btnCopy.setFillStyle(0xff9800);
+                // Hệ thống Visibility Event sẽ lo phần còn lại khi người chơi chuyển Tab
+            });
+        });
+    }
+
     registerVisibilityEvent() {
         // Hàm lắng nghe sự kiện Tab Trình duyệt
         this.visibilityHandler = () => {
@@ -390,38 +423,7 @@ class GameScene extends Phaser.Scene {
         });
     }
 
-   createSharePopup() {
-        // Tạo container và đẩy nó lên tận Depth 9999 để đảm bảo đè lên mọi thứ
-        this.sharePopup = this.add.container(0, 0).setDepth(9999).setVisible(false);
-        
-        let bg = this.add.rectangle(270, 480, 540, 960, 0x000000, 0.8).setInteractive(); 
-        let panel = this.add.rectangle(270, 480, 400, 250, 0xffffff, 1).setStrokeStyle(4, 0x000000);
-        let title = this.add.text(270, 400, 'HẾT LƯỢT MIỄN PHÍ!', { fontSize: '24px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5);
-        let desc = this.add.text(270, 450, 'Hãy Copy link game và chia sẻ\ncho bạn bè để nhận 1 lượt\ntrợ giúp ngay lập tức!', { fontSize: '18px', fill: '#333', align: 'center' }).setOrigin(0.5);
-        
-        let btnCopy = this.add.rectangle(270, 520, 200, 50, 0x4caf50).setInteractive({ useHandCursor: true });
-        let textCopy = this.add.text(270, 520, 'COPY LINK', { fontSize: '18px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
-        
-        let btnClose = this.add.text(270, 570, 'Bỏ qua', { fontSize: '16px', fill: '#888' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
-        this.sharePopup.add([bg, panel, title, desc, btnCopy, textCopy, btnClose]);
-
-        btnClose.on('pointerdown', () => {
-            this.sharePopup.setVisible(false);
-            this.pendingShareBooster = null; 
-            textCopy.setText('COPY LINK'); // Reset lại text
-            btnCopy.setFillStyle(0x4caf50); // Reset lại màu xanh
-        });
-
-        btnCopy.on('pointerdown', () => {
-            let gameLink = "https://dangthnh.github.io/Yang-Le-Ge-Yang-Clone/"; 
-            navigator.clipboard.writeText(gameLink).then(() => {
-                textCopy.setText('ĐÃ COPY!');
-                btnCopy.setFillStyle(0xff9800);
-                // Hệ thống Visibility Event sẽ lo phần còn lại khi người chơi chuyển Tab
-            });
-        });
-    }
+   
 
     createBoostersUI() {
         this.boosterBtns = {};
