@@ -106,44 +106,44 @@ class GameScene extends Phaser.Scene {
     // =======================================================
     // HỆ THỐNG SHARE LINK VIRAL
     // =======================================================
-    createSharePopup() {
-        // Khung Popup ẩn
-        this.sharePopup = this.add.container(0, 0).setDepth(300).setVisible(false);
+    // createSharePopup() {
+    //     // Khung Popup ẩn
+    //     this.sharePopup = this.add.container(0, 0).setDepth(300).setVisible(false);
         
-        // Màn đen mờ
-        let bg = this.add.rectangle(270, 480, 540, 960, 0x000000, 0.8).setInteractive(); 
+    //     // Màn đen mờ
+    //     let bg = this.add.rectangle(270, 480, 540, 960, 0x000000, 0.8).setInteractive(); 
         
-        // Bảng thông báo
-        let panel = this.add.rectangle(270, 480, 400, 250, 0xffffff, 1).setStrokeStyle(4, 0x000000);
-        let title = this.add.text(270, 400, 'HẾT LƯỢT MIỄN PHÍ!', { fontSize: '24px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5);
-        let desc = this.add.text(270, 450, 'Hãy Copy link game và chia sẻ\ncho bạn bè để nhận 1 lượt\ntrợ giúp ngay lập tức!', { fontSize: '18px', fill: '#333', align: 'center' }).setOrigin(0.5);
+    //     // Bảng thông báo
+    //     let panel = this.add.rectangle(270, 480, 400, 250, 0xffffff, 1).setStrokeStyle(4, 0x000000);
+    //     let title = this.add.text(270, 400, 'HẾT LƯỢT MIỄN PHÍ!', { fontSize: '24px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5);
+    //     let desc = this.add.text(270, 450, 'Hãy Copy link game và chia sẻ\ncho bạn bè để nhận 1 lượt\ntrợ giúp ngay lập tức!', { fontSize: '18px', fill: '#333', align: 'center' }).setOrigin(0.5);
         
-        // Nút Copy
-        let btnCopy = this.add.rectangle(270, 520, 200, 50, 0x4caf50).setInteractive({ useHandCursor: true });
-        let textCopy = this.add.text(270, 520, 'COPY LINK & SHARE', { fontSize: '18px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+    //     // Nút Copy
+    //     let btnCopy = this.add.rectangle(270, 520, 200, 50, 0x4caf50).setInteractive({ useHandCursor: true });
+    //     let textCopy = this.add.text(270, 520, 'COPY LINK & SHARE', { fontSize: '18px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
         
-        // Nút Hủy
-        let btnClose = this.add.text(270, 570, 'Bỏ qua', { fontSize: '16px', fill: '#888' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    //     // Nút Hủy
+    //     let btnClose = this.add.text(270, 570, 'Bỏ qua', { fontSize: '16px', fill: '#888' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-        this.sharePopup.add([bg, panel, title, desc, btnCopy, textCopy, btnClose]);
+    //     this.sharePopup.add([bg, panel, title, desc, btnCopy, textCopy, btnClose]);
 
-        btnClose.on('pointerdown', () => {
-            this.sharePopup.setVisible(false);
-            this.pendingShareBooster = null; // Hủy chờ share
-        });
+    //     btnClose.on('pointerdown', () => {
+    //         this.sharePopup.setVisible(false);
+    //         this.pendingShareBooster = null; // Hủy chờ share
+    //     });
 
-        btnCopy.on('pointerdown', () => {
-            // Lưu link Github Pages của cậu vào Clipboard
-            let gameLink = "https://dangthnh.github.io/Yang-Le-Ge-Yang-Clone/"; 
-            navigator.clipboard.writeText(gameLink).then(() => {
-                textCopy.setText('ĐÃ COPY!');
-                btnCopy.setFillStyle(0xff9800);
+    //     btnCopy.on('pointerdown', () => {
+    //         // Lưu link Github Pages của cậu vào Clipboard
+    //         let gameLink = "https://dangthnh.github.io/Yang-Le-Ge-Yang-Clone/"; 
+    //         navigator.clipboard.writeText(gameLink).then(() => {
+    //             textCopy.setText('ĐÃ COPY!');
+    //             btnCopy.setFillStyle(0xff9800);
                 
-                // MẸO TÂM LÝ: Chờ người chơi rời Tab (Ra Facebook/Zalo dán link)
-                // Biến pendingShareBooster đã được gán tên chức năng từ lúc mở Popup
-            });
-        });
-    }
+    //             // MẸO TÂM LÝ: Chờ người chơi rời Tab (Ra Facebook/Zalo dán link)
+    //             // Biến pendingShareBooster đã được gán tên chức năng từ lúc mở Popup
+    //         });
+    //     });
+    // }
 
     registerVisibilityEvent() {
         // Hàm lắng nghe sự kiện Tab Trình duyệt
