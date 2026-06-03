@@ -41,7 +41,7 @@ class GameScene extends Phaser.Scene {
         this.isAnimating = false; 
 
         // TEXT LEVEL VÔ HẠN
-        let levelTitle = this.currentLevelIndex === 1 ? "Level 1: Tutorial" : `Level ${this.currentLevelIndex}: Endless Hell`;
+        let levelTitle = this.currentLevelIndex === 1 ? "Level 1: Tutorial" : `Level ${this.currentLevelIndex}:`;
         this.add.text(270, 30, levelTitle, { fontSize: '24px', fill: '#ffffff', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(200);
 
         //this.add.rectangle(270, 850, 480, 80, 0x000000, 0.5).setStrokeStyle(4, 0x8b5a2b);
@@ -134,7 +134,7 @@ class GameScene extends Phaser.Scene {
 
         btnCopy.on('pointerdown', () => {
             // Lưu link Github Pages của cậu vào Clipboard
-            let gameLink = "https://[username].github.io/jump-jump-2.5d/"; 
+            let gameLink = "https://dangthnh.github.io/Yang-Le-Ge-Yang-Clone/"; 
             navigator.clipboard.writeText(gameLink).then(() => {
                 textCopy.setText('ĐÃ COPY!');
                 btnCopy.setFillStyle(0xff9800);
@@ -414,7 +414,7 @@ class GameScene extends Phaser.Scene {
         });
 
         btnCopy.on('pointerdown', () => {
-            let gameLink = "https://[username].github.io/jump-jump-2.5d/"; 
+            let gameLink = "https://dangthnh.github.io/Yang-Le-Ge-Yang-Clone/"; 
             navigator.clipboard.writeText(gameLink).then(() => {
                 textCopy.setText('ĐÃ COPY!');
                 btnCopy.setFillStyle(0xff9800);
