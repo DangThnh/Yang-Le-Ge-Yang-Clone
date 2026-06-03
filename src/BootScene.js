@@ -20,24 +20,39 @@ class BootScene extends Phaser.Scene {
             progressBox.destroy();
         });
 
+      
+
         // Tải mảng hình ảnh ô bài
         this.load.setPath('assets/images/');
-        this.load.image('apple', 'apple.png');
-        this.load.image('banana', 'banana.png');
+        this.load.image('corn', 'corn.png');
+        this.load.image('bell', 'bell.png');
         this.load.image('carrot', 'carrot.png');
-        this.load.image('grape', 'grape.png');
-        this.load.image('watermelon', 'watermelon.png');
-        this.load.image('cow', 'cow.png');
-        this.load.image('tractor', 'tractor.png');
-        this.load.image('wheat', 'wheat.png');
-        this.load.image('barn', 'barn.png');
-        this.load.image('chicken', 'chicken.png');
+        this.load.image('brush', 'brush.png');
+        this.load.image('bucket', 'bucket.png');
+        this.load.image('cabbage', 'cabbage.png');
+        this.load.image('campfire', 'campfire.png');
+        this.load.image('glove', 'glove.png');
+        this.load.image('grass', 'grass.png');
+        this.load.image('hay', 'hay.png');
+        this.load.image('milk', 'milk.png');
+        this.load.image('pitchfork', 'pitchfork.png');
+        this.load.image('shear', 'shear.png');
+        this.load.image('stump', 'stump.png');
+        this.load.image('yarn', 'yarn.png');
+
 
          // DÙNG LẠI TÀI NGUYÊN JUMP JUMP
         this.load.image('dust', 'dust.png'); 
+
+          this.load.image('bg_1', 'bg_1.png');
+        this.load.image('bg_2', 'bg_2.png');
+        this.load.image('bg_3', 'bg_3.png');
+
+        this.load.image('slot_bar', 'slot_bar.png');
         
 
         this.load.setPath('assets/audio/');
+        this.load.audio('bgm', 'bgm.mp3');
         this.load.audio('sfx_land', 'land.mp3');         // Tiếng bốc bài xuống khay
         this.load.audio('sfx_perfect', 'perfect.mp3');   // Tiếng nổ bài Match-3
         this.load.audio('sfx_gameover', 'gameover.mp3'); // Tiếng thua

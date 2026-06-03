@@ -3,168 +3,354 @@ class GameScene extends Phaser.Scene {
         super('GameScene');
     }
 
-    // NHẬN BIẾN LEVEL TỪ LẦN GỌI SCENE (Mặc định là màn 1 nếu không truyền vào)
     init(data) {
+        // Tích lũy Level và Quản lý số lượt trợ giúp giữa các màn
         this.currentLevelIndex = data.levelIndex || 1; 
+        
+        // Quản lý số lượt Boosters: Mỗi loại có 1 lượt Free + 1 lượt Share
+        this.boosters = data.boosters || {
+            shuffle: { free: 1, share: 1 },
+            undo: { free: 1, share: 1 },
+            moveOut: { free: 1, share: 1 }
+        };
+        
+        // Biến phục vụ hệ thống Share
+        this.pendingShareBooster = null; 
     }
 
     create() {
-        this.cameras.main.setBackgroundColor('#eef5db'); 
+        // 1. RENDER BACKGROUND RANDOM
+        let randomBgNum = Phaser.Math.Between(1, 3);
+        if (this.textures.exists(`bg_${randomBgNum}`)) {
+            this.add.image(270, 480, `bg_${randomBgNum}`).setDisplaySize(540, 960).setDepth(-10);
+        } else {
+            this.cameras.main.setBackgroundColor('#eef5db'); 
+        }
 
-        this.TILE_WIDTH = 60;
-        this.TILE_HEIGHT = 60;
-        this.MAX_SLOTS = 7;
+        // 2. PHÁT NHẠC NỀN (Loop vô hạn)
+        if (this.cache.audio.exists('bgm')) {
+            // Kiểm tra xem nhạc đã chạy chưa để tránh bị đè nhạc khi qua màn
+            let bgm = this.sound.get('bgm');
+            if (!bgm) {
+                this.sound.play('bgm', { loop: true, volume: 0.5 });
+            }
+        }
 
-        this.activeTiles = []; 
-        this.slotBar = [];     
-        this.waitArea = []; 
+        this.TILE_WIDTH = 60; this.TILE_HEIGHT = 60; this.MAX_SLOTS = 7;
+        this.activeTiles = []; this.slotBar = []; this.waitArea = []; 
         this.isAnimating = false; 
 
-        // Lấy dữ liệu Level hiện tại từ file JSON đã tải ở BootScene
-        let allLevelsData = this.cache.json.get('levelData').levels;
+        // TEXT LEVEL VÔ HẠN
+        let levelTitle = this.currentLevelIndex === 1 ? "Level 1: Tutorial" : `Level ${this.currentLevelIndex}: Endless Hell`;
+        this.add.text(270, 30, levelTitle, { fontSize: '24px', fill: '#ffffff', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(200);
+
+        //this.add.rectangle(270, 850, 480, 80, 0x000000, 0.5).setStrokeStyle(4, 0x8b5a2b);
         
-        // Cố gắng tìm màn chơi có ID tương ứng, nếu không thấy thì báo lỗi và quay về màn 1
-        this.levelConfig = allLevelsData.find(l => l.id === this.currentLevelIndex);
-        if (!this.levelConfig) {
-            console.log("Đã hết màn chơi! Bắt đầu lại từ màn 1.");
-            this.currentLevelIndex = 1;
-            this.levelConfig = allLevelsData.find(l => l.id === 1);
-        }
+        // --- GIAO DIỆN KHAY CHỨA MỚI (DÙNG ASSET ẢNH) ---
+        // Đặt ảnh khay chứa vào đúng tọa độ cũ: X=270 (Giữa màn hình), Y=850
+        this.slotBarImage = this.add.image(270, 880, 'slot_bar').setDepth(0);
 
-        // --- HIỂN THỊ TÊN MÀN CHƠI LÊN MÀN HÌNH ---
-        this.add.text(270, 30, `Level ${this.levelConfig.id}: ${this.levelConfig.name}`, { 
-            fontSize: '24px', 
-            fill: '#555',
-            fontStyle: 'bold'
-        }).setOrigin(0.5).setDepth(200);
+        // ĐIỀU CHỈNH KÍCH THƯỚC ĐỂ KHỚP VỚI KHUNG CŨ:
+        // Khung cũ của chúng ta có kích thước là Rộng (Width) = 480px, Cao (Height) = 80px.
+        // Dùng lệnh setDisplaySize để ép bức ảnh của cậu phình ra hoặc teo lại đúng bằng kích thước này,
+        // bất chấp ảnh gốc của cậu to nhỏ ra sao.
+        this.slotBarImage.setDisplaySize(580, 250);
 
-        this.add.rectangle(270, 850, 480, 80, 0x000000, 0.1).setStrokeStyle(4, 0x8b5a2b);
+        // TẠO UI BOOSTERS VÀ POPUP SHARE
 
-        if (this.textures.exists('dust')) {
-            this.matchEmitter = this.add.particles(0, 0, 'dust', {
-                speed: { min: 100, max: 300 }, angle: { min: 0, max: 360 },
-                scale: { start: 1, end: 0 }, alpha: { start: 0.8, end: 0 },
-                lifespan: 400, gravityY: 200, emitting: false 
-            }).setDepth(200);
-        }
-
-        if (this.cache.audio.exists('sfx_land')) {
+          if (this.cache.audio.exists('sfx_land')) {
             this.landSound = this.sound.add('sfx_land');
+        }
+        if (this.cache.audio.exists('sfx_perfect')) {
+            this.perfectSound = this.sound.add('sfx_perfect');
+        }
+        if (this.cache.audio.exists('sfx_gameover')) {
+            this.gameoverSound = this.sound.add('sfx_gameover');
         }
 
         this.createBoostersUI();
+        this.createSharePopup();
 
-        // 1. CHUẨN BỊ MẢNG LAYOUT RỖNG TỪ JSON
+        // 3. TẠO MÀN CHƠI
         this.mapLayout = []; 
-        
-        // Deep copy dữ liệu JSON ra (để thuật toán sinh không làm hỏng data gốc)
-        this.levelConfig.layout.forEach(p => {
-            this.mapLayout.push({ x: p.x, y: p.y, z: p.z, icon: null });
-        });
+        if (this.currentLevelIndex === 1) {
+            // MÀN 1: Từ JSON (Tutorial)
+            let allLevelsData = this.cache.json.get('levelData').levels;
+            let lvl1Data = allLevelsData.find(l => l.id === 1);
+            lvl1Data.layout.forEach(p => this.mapLayout.push({ x: p.x, y: p.y, z: p.z, icon: null }));
+        } else {
+            // TỪ MÀN 2 TRỞ ĐI: VÔ HẠN MAP ĐỊA NGỤC (Generative)
+            this.generateHellModeLayout();
+        }
 
-        // NẾU TỔNG SỐ LƯỢNG Ô KHÔNG CHIA HẾT CHO 3 THÌ SAO? 
-        // Ta phải tự động nhét thêm "ô rác" lấp vào cho đủ chia hết cho 3 để tránh lỗi crash thuật toán!
         let remainder = this.mapLayout.length % 3;
         if (remainder !== 0) {
             let needed = 3 - remainder;
-            
-            // Tìm tọa độ của lá bài nằm ngoài cùng bên TRÁI và PHẢI của bản đồ
             let leftMost = this.mapLayout.reduce((prev, curr) => (curr.x < prev.x ? curr : prev));
             let rightMost = this.mapLayout.reduce((prev, curr) => (curr.x > prev.x ? curr : prev));
-
-            if (needed === 1) {
-                // Nếu thiếu 1 lá, lót nó xuống Tầng -1 của cọc ngoài cùng bên Trái
-                this.mapLayout.push({ x: leftMost.x, y: leftMost.y, z: -1, icon: null });
-            } else if (needed === 2) {
-                // Nếu thiếu 2 lá, lót đối xứng 1 lá bên Trái, 1 lá bên Phải ở Tầng -1
+            if (needed === 1) this.mapLayout.push({ x: leftMost.x, y: leftMost.y, z: -1, icon: null });
+            else if (needed === 2) {
                 this.mapLayout.push({ x: leftMost.x, y: leftMost.y, z: -1, icon: null });
                 this.mapLayout.push({ x: rightMost.x, y: rightMost.y, z: -1, icon: null });
             }
         }
 
-        // =================================================================
-        // NÂNG CẤP 2: TỰ ĐỘNG NHẬN DIỆN "CỌC BÀI MÙ" VÀ TẠO HIỆU ỨNG THỊ GIÁC XẾP CHỒNG
-        // =================================================================
-        // Gom nhóm các ô bài có chung tọa độ X, Y
-        let coordinateGroups = {};
-        this.mapLayout.forEach(p => {
-            let key = `${p.x}_${p.y}`;
-            if (!coordinateGroups[key]) coordinateGroups[key] = [];
-            coordinateGroups[key].push(p);
+        // 4. CHẠY THUẬT TOÁN SINH BÀI
+        this.generateSolvableMap();
+        this.updateTileStates();
+
+        // ĐĂNG KÝ SỰ KIỆN RỜI TAB CHO HỆ THỐNG SHARE
+        this.registerVisibilityEvent();
+    }
+
+    // =======================================================
+    // HỆ THỐNG SHARE LINK VIRAL
+    // =======================================================
+    createSharePopup() {
+        // Khung Popup ẩn
+        this.sharePopup = this.add.container(0, 0).setDepth(300).setVisible(false);
+        
+        // Màn đen mờ
+        let bg = this.add.rectangle(270, 480, 540, 960, 0x000000, 0.8).setInteractive(); 
+        
+        // Bảng thông báo
+        let panel = this.add.rectangle(270, 480, 400, 250, 0xffffff, 1).setStrokeStyle(4, 0x000000);
+        let title = this.add.text(270, 400, 'HẾT LƯỢT MIỄN PHÍ!', { fontSize: '24px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5);
+        let desc = this.add.text(270, 450, 'Hãy Copy link game và chia sẻ\ncho bạn bè để nhận 1 lượt\ntrợ giúp ngay lập tức!', { fontSize: '18px', fill: '#333', align: 'center' }).setOrigin(0.5);
+        
+        // Nút Copy
+        let btnCopy = this.add.rectangle(270, 520, 200, 50, 0x4caf50).setInteractive({ useHandCursor: true });
+        let textCopy = this.add.text(270, 520, 'COPY LINK & SHARE', { fontSize: '18px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+        
+        // Nút Hủy
+        let btnClose = this.add.text(270, 570, 'Bỏ qua', { fontSize: '16px', fill: '#888' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        this.sharePopup.add([bg, panel, title, desc, btnCopy, textCopy, btnClose]);
+
+        btnClose.on('pointerdown', () => {
+            this.sharePopup.setVisible(false);
+            this.pendingShareBooster = null; // Hủy chờ share
         });
 
-        // Quét các nhóm, nhóm nào có TỪ 2 LÁ TRỞ LÊN -> Đó chính là Cọc Bài Mù!
-        for (let key in coordinateGroups) {
-            let pile = coordinateGroups[key];
-            if (pile.length > 1) {
-                // Sắp xếp các lá trong cọc từ tầng thấp (z nhỏ) lên tầng cao (z lớn)
-                pile.sort((a, b) => a.z - b.z); 
+        btnCopy.on('pointerdown', () => {
+            // Lưu link Github Pages của cậu vào Clipboard
+            let gameLink = "https://[username].github.io/jump-jump-2.5d/"; 
+            navigator.clipboard.writeText(gameLink).then(() => {
+                textCopy.setText('ĐÃ COPY!');
+                btnCopy.setFillStyle(0xff9800);
                 
-                // Trượt tọa độ Y của các lá tầng trên xuống dưới 5px để lộ viền lá bên dưới
-                pile.forEach((p, index) => {
-                    p.y += (index * 8); 
-                });
+                // MẸO TÂM LÝ: Chờ người chơi rời Tab (Ra Facebook/Zalo dán link)
+                // Biến pendingShareBooster đã được gán tên chức năng từ lúc mở Popup
+            });
+        });
+    }
+
+    registerVisibilityEvent() {
+        // Hàm lắng nghe sự kiện Tab Trình duyệt
+        this.visibilityHandler = () => {
+            // Khi tab hiện lại (hidden == false) VÀ người chơi đang chờ nhận quà Share
+            if (!document.hidden && this.pendingShareBooster) {
+                // TẶNG QUÀ
+                let bType = this.pendingShareBooster;
+                this.boosters[bType].share = 0; // Trừ lượt Share (chỉ đc 1 lần)
+                
+                // Ẩn Popup
+                this.sharePopup.setVisible(false);
+                this.pendingShareBooster = null;
+                
+                // Kích hoạt luôn kỹ năng
+                if (bType === 'shuffle') this.useShuffle();
+                if (bType === 'undo') this.useUndo();
+                if (bType === 'moveOut') this.useMoveOut();
+                
+                // Update UI nút
+                this.updateBoosterUI();
+            }
+        };
+
+        document.addEventListener("visibilitychange", this.visibilityHandler);
+        
+        // Xóa sự kiện khi Restart Scene để tránh bị lặp (Memory Leak)
+        this.events.on('shutdown', () => {
+            document.removeEventListener("visibilitychange", this.visibilityHandler);
+        });
+    }
+
+    // Helper tạo giao diện Boosters
+   
+    createBoostersUI() {
+        this.boosterBtns = {};
+
+        const createBtn = (x, type, text) => {
+            let btn = this.add.rectangle(x, 920, 100, 40, 0x2196f3).setInteractive({ useHandCursor: true });
+            let label = this.add.text(x, 920, text, { fontSize: '18px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+            let icon = this.add.text(x, 890, '⭐', { fontSize: '20px' }).setOrigin(0.5);
+
+            this.boosterBtns[type] = { btn, label, icon };
+
+            btn.on('pointerdown', () => {
+                if (this.isAnimating) return; // Khóa spam click
+                
+                let data = this.boosters[type];
+
+                // TRÁNH NUỐT LƯỢT OAN UỔNG: Kiểm tra điều kiện TRƯỚC KHI xử lý bất cứ thứ gì
+                if (type === 'moveOut' && this.slotBar.length === 0) {
+                    console.log("Khay trống, không có gì để bốc!");
+                    return; // Trả về luôn, không trừ lượt
+                }
+                if (type === 'undo' && this.slotBar.length === 0) {
+                    console.log("Khay trống, không có gì để hoàn tác!");
+                    return; // Trả về luôn, không trừ lượt
+                }
+
+                // Nếu có đủ đkiện thực thi, thì mới làm hiệu ứng nút lún xuống
+                this.tweens.add({ targets: [btn, label], scale: 0.9, yoyo: true, duration: 50 });
+
+                // DÙNG LƯỢT MIỄN PHÍ
+                if (data.free > 0) {
+                    data.free--;
+                    if (type === 'shuffle') this.useShuffle();
+                    if (type === 'undo') this.useUndo();
+                    if (type === 'moveOut') this.useMoveOut();
+                    this.updateBoosterUI();
+                } 
+                // DÙNG LƯỢT SHARE (Nếu hết Free và còn Share)
+                else if (data.share > 0) {
+                    this.pendingShareBooster = type;
+                    // BẬT POPUP LÊN TRÊN CÙNG
+                    this.sharePopup.setVisible(true); 
+                    this.sharePopup.setDepth(999);
+                }
+            });
+        };
+
+        createBtn(120, 'shuffle', 'Đảo Bài');
+        createBtn(270, 'undo', 'Hoàn Tác');
+        createBtn(420, 'moveOut', 'Bốc Lên'); // Đổi tên thành "Bốc Lên" cho hợp lý
+
+        this.updateBoosterUI();
+    }
+
+    updateBoosterUI() {
+        ['shuffle', 'undo', 'moveOut'].forEach(type => {
+            let data = this.boosters[type];
+            let ui = this.boosterBtns[type];
+            
+            if (data.free > 0) {
+                ui.icon.setText('Free');
+                ui.btn.setFillStyle(0x4caf50); // Xanh lá
+            } else if (data.share > 0) {
+                ui.icon.setText('Share');
+                ui.btn.setFillStyle(0xff9800); // Cam
+            } else {
+                ui.icon.setText('X');
+                ui.btn.setFillStyle(0x777777); // Xám (Hết)
+                // KHÔNG DISABLE INTERACTIVE Ở ĐÂY NỮA, để logic bên trên chặn lại
+                // ui.btn.disableInteractive(); 
+            }
+        });
+    }
+
+    // =======================================================
+    // SIÊU THUẬT TOÁN TẠO MAP ĐỊA NGỤC (YANG LE GE YANG CORE)
+    // =======================================================
+    generateHellModeLayout() {
+        // AREA 1: TRUNG TÂM (Xếp chéo góc 30px, cao 18-22 tầng) ~ 150 lá
+        let maxCenterLayers = Phaser.Math.Between(18, 22);
+        for (let z = 0; z <= maxCenterLayers; z++) {
+            // Càng lên cao diện tích càng ngẫu nhiên thu hẹp để tạo các "cầu nối" đứt gãy
+            let isOdd = z % 2 !== 0;
+            let offsetX = isOdd ? 30 : 0;
+            let offsetY = isOdd ? 30 : 0;
+            
+            // Random kích thước khối trung tâm cho mỗi tầng
+            let cols = Phaser.Math.Between(3, 5); 
+            let rows = Phaser.Math.Between(4, 6);
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    // Xác suất 20% đục lỗ (khoét rỗng) để làm giảm số lá bài trên đỉnh, tăng độ khóa
+                    if (z > 5 && Math.random() < 0.2) continue; 
+
+                    let x = 120 + offsetX + (c * 60);
+                    let y = 180 + offsetY + (r * 60);
+                    this.mapLayout.push({ x: x, y: y, z: z, icon: null });
+                }
             }
         }
 
-        // 2. CHẠY THUẬT TOÁN SINH NGƯỢC (100% GIẢI ĐƯỢC)
-        this.generateSolvableMap();
+        // AREA 2: VIỀN XUNG QUANH (Xếp lệch offset 25-30px lên xuống, cao 8-10 tầng) ~ 60 lá
+        let maxSideLayers = Phaser.Math.Between(8, 10);
+        let sidePositions = [
+            { x: 60, y: 300 }, { x: 480, y: 300 }, // Rìa trên
+            { x: 150, y: 600 }, { x: 270, y: 600 }, { x: 390, y: 600 } // Rìa dưới bao trọn
+        ];
         
-        // 3. CẬP NHẬT TRẠNG THÁI KHÓA/MỞ
-        this.updateTileStates();
-    }
+        for (let z = 0; z <= maxSideLayers; z++) {
+            sidePositions.forEach(pos => {
+                // Tầng chẵn lệch xuống 30px, tầng lẻ lệch lên 30px -> Lộ icon rất rõ
+                let yOffset = (z % 2 === 0) ? (z * 15) : -(z * 15);
+                this.mapLayout.push({ x: pos.x, y: pos.y + yOffset, z: z, icon: null });
+            });
+        }
 
-    // (XÓA HÀM createLayoutStructure CŨ ĐI VÌ CHÚNG TA ĐÃ DÙNG JSON RỒI)
-
-   generateSolvableMap() {
-        const iconTypes = [
-            'apple', 'banana', 'carrot', 'grape', 'watermelon',
-            'cow', 'tractor', 'wheat', 'barn', 'chicken'
+        // AREA 3: CÁC CỌC BÀI MÙ (Blind Piles) - Cực kì sát nhau, cao 12-16 tầng ~ 50-60 lá
+        let maxBlindLayers = Phaser.Math.Between(12, 16);
+        let blindPositions = [
+            { x: 90, y: 680 }, { x: 150, y: 680 }, // Cụm mù góc trái dưới
+            { x: 390, y: 680 }, { x: 450, y: 680 }  // Cụm mù góc phải dưới
         ];
 
-        let emptyPoints = [...this.mapLayout];
-        
-        // Sắp xếp các điểm trống theo Z từ cao xuống thấp (Để ưu tiên bốc từ trên đỉnh)
+        for (let z = 0; z <= maxBlindLayers; z++) {
+            blindPositions.forEach(pos => {
+                // Thuật toán bẻ góc Cọc mù như cậu mô tả:
+                // Z 0-10: Trượt ngang. Z 10+: Trượt dọc xuống.
+                let xShift = 0;
+                let yShift = 0;
+                
+                if (z <= 10) {
+                    // Nếu bên trái màn hình (x < 270), trượt phải. Ngược lại trượt trái.
+                    xShift = (pos.x < 270) ? (z * 2) : -(z * 2);
+                } else {
+                    // Giữ nguyên xShift của tầng 10, bắt đầu trượt Y xuống
+                    xShift = (pos.x < 270) ? 20 : -20;
+                    yShift = (z - 10) * 3;
+                }
+
+                this.mapLayout.push({ x: pos.x + xShift, y: pos.y + yShift, z: z, icon: null });
+            });
+        }
+    }
+
+    // =======================================================
+    // CẬP NHẬT 15 LOẠI ICON Ở HÀM GENERATE SOLVABLE MAP
+    // =======================================================
+    generateSolvableMap() {
+        // ĐÃ UPDATE ĐỦ 15 LOẠI ICON
+        const iconTypes = [
+            'bell', 'brush', 'carrot', 'bucket', 'cabbage',
+            'campfire', 'corn', 'glove', 'grass', 'hay',
+            'milk', 'pitchfork', 'shear', 'stump', 'yarn'
+        ];
+
+          let emptyPoints = [...this.mapLayout];
         emptyPoints.sort((a, b) => b.z - a.z);
 
-        // Đọc độ khó từ JSON (Nếu không có mặc định là 5)
-        let difficulty = this.levelConfig.difficulty || 5;
+        // Màn 1 Dễ (Diff 1), Màn 2 Khó (Diff 10)
+      let difficulty = 10; 
 
         while (emptyPoints.length >= 3) {
             let randomIcon = iconTypes[Math.floor(Math.random() * iconTypes.length)];
             let chosenPoints = [];
+            chosenPoints.push(emptyPoints.splice(0, 1)[0]);
 
-            // Chọn điểm ĐẦU TIÊN (Ưu tiên lấy ở lớp Z cao nhất hiện tại)
-            let p1Index = 0; 
-            chosenPoints.push(emptyPoints.splice(p1Index, 1)[0]);
-
-            // DỰA VÀO ĐỘ KHÓ ĐỂ QUYẾT ĐỊNH 2 ĐIỂM CÒN LẠI SẼ NẰM Ở ĐÂU
             for (let i = 0; i < 2; i++) {
-                let pIndex = 0;
-
-                // Tung xúc xắc độ khó (Tối đa 10)
-                // Ví dụ Màn 1 (Diff = 1): Xác suất 90% là chọn điểm ngay sát điểm đầu tiên (Cùng lớp Z).
-                // Màn 5 (Diff = 10): Xác suất 100% là nó sẽ bốc mẹ 1 điểm rác ở tít Tầng Z=0 hoặc Z=-1 để giam bài!
-                let roll = Math.random() * 10;
-                
-                if (roll > difficulty) {
-                    // DỄ: Bốc điểm gần nhất (Cùng Z hoặc Z chênh lệch 1)
-                    pIndex = 0; // Lấy điểm ngay đầu mảng (Z cao)
-                } else {
-                    // KHÓ: Bốc một điểm ngẫu nhiên tít dưới đáy mảng (Z thấp)
-                    pIndex = Math.floor(Math.random() * emptyPoints.length);
-                }
-
+                let pIndex = (Math.random() * 10 > difficulty) ? 0 : Math.floor(Math.random() * emptyPoints.length);
                 chosenPoints.push(emptyPoints.splice(pIndex, 1)[0]);
             }
 
-            // Gán icon cho 3 điểm đã bốc
             chosenPoints.forEach(p => p.icon = randomIcon);
-            
-            // Xáo trộn lại một chút mảng emptyPoints để tránh quy luật quá dập khuôn
-            if (Math.random() > 0.5) {
-                emptyPoints.sort((a, b) => b.z - a.z);
-            }
+            if (Math.random() > 0.5) emptyPoints.sort((a, b) => b.z - a.z);
         }
 
         this.renderGeneratedMap();
@@ -204,28 +390,141 @@ class GameScene extends Phaser.Scene {
         });
     }
 
-    // Helper tạo giao diện Boosters
+   createSharePopup() {
+        // Tạo container và đẩy nó lên tận Depth 9999 để đảm bảo đè lên mọi thứ
+        this.sharePopup = this.add.container(0, 0).setDepth(9999).setVisible(false);
+        
+        let bg = this.add.rectangle(270, 480, 540, 960, 0x000000, 0.8).setInteractive(); 
+        let panel = this.add.rectangle(270, 480, 400, 250, 0xffffff, 1).setStrokeStyle(4, 0x000000);
+        let title = this.add.text(270, 400, 'HẾT LƯỢT MIỄN PHÍ!', { fontSize: '24px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5);
+        let desc = this.add.text(270, 450, 'Hãy Copy link game và chia sẻ\ncho bạn bè để nhận 1 lượt\ntrợ giúp ngay lập tức!', { fontSize: '18px', fill: '#333', align: 'center' }).setOrigin(0.5);
+        
+        let btnCopy = this.add.rectangle(270, 520, 200, 50, 0x4caf50).setInteractive({ useHandCursor: true });
+        let textCopy = this.add.text(270, 520, 'COPY LINK', { fontSize: '18px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+        
+        let btnClose = this.add.text(270, 570, 'Bỏ qua', { fontSize: '16px', fill: '#888' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        this.sharePopup.add([bg, panel, title, desc, btnCopy, textCopy, btnClose]);
+
+        btnClose.on('pointerdown', () => {
+            this.sharePopup.setVisible(false);
+            this.pendingShareBooster = null; 
+            textCopy.setText('COPY LINK'); // Reset lại text
+            btnCopy.setFillStyle(0x4caf50); // Reset lại màu xanh
+        });
+
+        btnCopy.on('pointerdown', () => {
+            let gameLink = "https://[username].github.io/jump-jump-2.5d/"; 
+            navigator.clipboard.writeText(gameLink).then(() => {
+                textCopy.setText('ĐÃ COPY!');
+                btnCopy.setFillStyle(0xff9800);
+                // Hệ thống Visibility Event sẽ lo phần còn lại khi người chơi chuyển Tab
+            });
+        });
+    }
+
     createBoostersUI() {
-        const createBtn = (x, text, callback) => {
-            let btn = this.add.rectangle(x, 930, 100, 40, 0x4caf50).setInteractive({ useHandCursor: true });
-            let label = this.add.text(x, 930, text, { fontSize: '18px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
-            
+        this.boosterBtns = {};
+
+        const createBtn = (x, type, text) => {
+            let btn = this.add.rectangle(x, 920, 100, 40, 0x2196f3).setInteractive({ useHandCursor: true });
+            let label = this.add.text(x, 920, text, { fontSize: '18px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+            let icon = this.add.text(x, 890, '⭐', { fontSize: '20px' }).setOrigin(0.5);
+
+            this.boosterBtns[type] = { btn, label, icon };
+
             btn.on('pointerdown', () => {
-                if (this.isAnimating) return;
+                if (this.isAnimating) return; 
                 
-                // Hiệu ứng bấm nút
-                this.tweens.add({ targets: [btn, label], scale: 0.9, yoyo: true, duration: 50 });
-                callback();
-                
-                // Dùng xong thì vô hiệu hóa nút (Mỗi loại chỉ dùng 1 lần)
-                btn.setFillStyle(0x777777);
-                btn.disableInteractive();
+                let data = this.boosters[type];
+
+                // CHẶN NUỐT LƯỢT NẾU KHAY RỖNG
+                if ((type === 'moveOut' || type === 'undo') && this.slotBar.length === 0) {
+                    console.log("Không có thẻ trong khay để dùng Booster này!");
+                    // Cho nút nhấp nháy báo lỗi nhẹ
+                    this.tweens.add({ targets: [btn, label], alpha: 0.5, yoyo: true, duration: 100 });
+                    return; 
+                }
+
+                // XỬ LÝ LƯỢT FREE
+                if (data.free > 0) {
+                    this.tweens.add({ targets: [btn, label], scale: 0.9, yoyo: true, duration: 50 });
+                    data.free--;
+                    
+                    if (type === 'shuffle') this.useShuffle();
+                    if (type === 'undo') this.useUndo();
+                    if (type === 'moveOut') this.useMoveOut();
+                    
+                    this.updateBoosterUI(); // Gọi update để đổi màu sang Share
+                } 
+                // XỬ LÝ LƯỢT SHARE
+                else if (data.share > 0) {
+                    this.tweens.add({ targets: [btn, label], scale: 0.9, yoyo: true, duration: 50 });
+                    
+                    // Ghi nhớ người chơi đang đòi Share cái kỹ năng nào
+                    this.pendingShareBooster = type;
+                    
+                    // BẬT POPUP SHARE ĐÒI MẠNG
+                    this.sharePopup.setVisible(true);
+                }
             });
         };
 
-        createBtn(120, 'Đảo Bài', () => this.useShuffle());
-        createBtn(270, 'Hoàn Tác', () => this.useUndo());
-        createBtn(420, 'Bốc 3 Lá', () => this.useMoveOut());
+        createBtn(120, 'shuffle', 'Đảo Bài');
+        createBtn(270, 'undo', 'Hoàn Tác');
+        createBtn(420, 'moveOut', 'Bốc Lên');
+
+        // Cập nhật UI ngay lúc mới load
+        this.updateBoosterUI();
+    }
+
+    updateBoosterUI() {
+        ['shuffle', 'undo', 'moveOut'].forEach(type => {
+            let data = this.boosters[type];
+            let ui = this.boosterBtns[type];
+            
+            if (data.free > 0) {
+                ui.icon.setText('Free');
+                ui.btn.setFillStyle(0x4caf50); 
+                ui.btn.setInteractive({ useHandCursor: true }); // Luôn bật
+            } else if (data.share > 0) {
+                ui.icon.setText('Share');
+                ui.btn.setFillStyle(0xff9800); 
+                ui.btn.setInteractive({ useHandCursor: true }); // Luôn bật để gọi Popup
+            } else {
+                ui.icon.setText('X');
+                ui.btn.setFillStyle(0x777777); 
+                ui.btn.disableInteractive(); // Tắt vĩnh viễn
+            }
+        });
+    }
+
+    registerVisibilityEvent() {
+        this.visibilityHandler = () => {
+            if (!document.hidden && this.pendingShareBooster && this.sharePopup.visible) {
+                // Thu hồi quà
+                let bType = this.pendingShareBooster;
+                this.boosters[bType].share = 0; 
+                
+                // Đóng Popup và Reset nó lại trạng thái gốc
+                this.sharePopup.setVisible(false);
+                this.pendingShareBooster = null;
+                
+                // Kích hoạt Booster
+                if (bType === 'shuffle') this.useShuffle();
+                if (bType === 'undo') this.useUndo();
+                if (bType === 'moveOut') this.useMoveOut();
+                
+                // Nút sẽ chuyển sang màu xám
+                this.updateBoosterUI();
+            }
+        };
+
+        document.addEventListener("visibilitychange", this.visibilityHandler);
+        
+        this.events.on('shutdown', () => {
+            document.removeEventListener("visibilitychange", this.visibilityHandler);
+        });
     }
     // =======================================================
     // 3. THUẬT TOÁN QUYẾT ĐỊNH KHÓA / MỞ BÀI (AABB COLLISION)
@@ -466,40 +765,46 @@ class GameScene extends Phaser.Scene {
     // =======================================================
     // 7. QUYẾT ĐỊNH SỐ PHẬN (THẮNG / THUA)
     // =======================================================
-    checkEndGameConditions() {
-        // ĐIỀU KIỆN THẮNG: Không còn lá nào trên bàn VÀ khay cũng trống trơn
-       if (this.activeTiles.length === 0 && this.slotBar.length === 0) {
+      checkEndGameConditions() {
+        if (this.activeTiles.length === 0 && this.slotBar.length === 0) {
             this.isAnimating = true; 
-            if (this.cache.audio.exists('sfx_perfect')) this.sound.play('sfx_perfect'); 
-            
-            this.add.text(270, 480, `VICTORY!\nCHUYỂN SANG MÀN ${this.currentLevelIndex + 1}...`, { 
-                fontSize: '36px', fill: '#ff5722', fontStyle: 'bold', align: 'center'
+
+            if (this.perfectSound) this.perfectSound.play(); 
+
+            this.add.text(270, 480, `THẮNG!`, { 
+                fontSize: '36px', fill: '#00ff00', fontStyle: 'bold', align: 'center', stroke: '#000', strokeThickness: 4
             }).setOrigin(0.5).setDepth(200);
 
-            // Đợi 2 giây rồi Restart Scene kèm theo việc tăng Level lên 1
+            // THẮNG: LÊN MÀN CHƠI VÔ HẠN (Giữ nguyên lượt Booster)
             this.time.delayedCall(2000, () => {
-                this.scene.restart({ levelIndex: this.currentLevelIndex + 1 });
+                this.scene.restart({ 
+                    levelIndex: this.currentLevelIndex + 1,
+                    boosters: this.boosters 
+                });
             });
         } 
-
-        // ĐIỀU KIỆN THUA: Khay chứa nhét đầy 7 lá mà không có bộ 3 nào để triệt tiêu
         else if (this.slotBar.length >= this.MAX_SLOTS) {
-            
             this.isAnimating = true; 
-             if (this.cache.audio.exists('sfx_gameover')) this.sound.play('sfx_gameover'); // Tiếng Thua
+
+             if (this.gameoverSound) {
+                this.gameoverSound.play({ volume: 1.0 });
+            }
             
-            // Làm đen màn hình tạo cảm giác thua cuộc
             this.add.rectangle(270, 480, 540, 960, 0x000000, 0.7).setDepth(199);
-            this.add.text(270, 480, 'GAME OVER!\nSLOTS ARE FULL!', { 
-                fontSize: '40px', 
-                fill: '#ff0000',
-                fontStyle: 'bold',
-                align: 'center'
+            this.add.text(270, 480, 'THUA!', { 
+                fontSize: '50px', fill: '#ff0000', fontStyle: 'bold', align: 'center', stroke: '#000', strokeThickness: 6
             }).setOrigin(0.5).setDepth(200);
 
-            // Đợi 2 giây rồi Restart
+            // THUA: ÉP CHƠI LẠI MÀN HIỆN TẠI (Reset lại lượt Booster cho đỡ cay cú)
             this.time.delayedCall(2000, () => {
-                this.scene.restart();
+                this.scene.restart({ 
+                    levelIndex: this.currentLevelIndex,
+                    boosters: {
+                        shuffle: { free: 1, share: 1 },
+                        undo: { free: 1, share: 1 },
+                        moveOut: { free: 1, share: 1 }
+                    }
+                });
             });
         }
     }
@@ -567,66 +872,69 @@ class GameScene extends Phaser.Scene {
 
     // BOOSTER 3: BỐC 3 LÁ (MOVE OUT)
    // BOOSTER 3: BỐC 3 LÁ (MOVE OUT)
+    // BOOSTER 3: BỐC BÀI LÊN CHỜ (Bốc tối đa 3 lá đầu tiên trong khay)
     useMoveOut() {
-        if (this.slotBar.length < 3) return;
+        // Ta không cần lệnh if (this.slotBar.length < 3) return; nữa, 
+        // vì điều kiện mảng = 0 đã bị chặn ở hàm tạo nút trên kia.
 
         this.isAnimating = true;
 
-        // Cắt 3 lá đầu tiên trong khay ra
-        let removedTiles = this.slotBar.splice(0, 3);
+        // Tính toán số lá sẽ bốc: Lấy tối đa 3 lá, nếu khay chỉ có 1 hoặc 2 lá thì lấy hết
+        let countToTake = Math.min(3, this.slotBar.length);
+        
+        // Cắt mảng
+        let removedTiles = this.slotBar.splice(0, countToTake);
         this.waitArea = this.waitArea.concat(removedTiles);
 
         removedTiles.forEach((tile, index) => {
-            let waitX = 150 + (index * 70); // Tọa độ X trên đài chờ
-            let waitY = 100;                // Tọa độ Y trên đài chờ
+            // Sắp xếp các lá bài trên đài chờ dịch sang phải dựa theo số lượng lá bài hiện có ở đó
+            // indexTrongKhuCho giúp các lá bài bốc sau không đè lên các lá bài bốc trước (nếu người chơi spam nút này)
+            let indexTrongKhuCho = this.waitArea.indexOf(tile);
+            
+            let waitX = 150 + (indexTrongKhuCho * 70); 
+            let waitY = 100;                
 
             tile.setInteractive({ useHandCursor: true });
             
-            // Tẩy sạch toàn bộ sự kiện click cũ của Kim tự tháp
             tile.off('pointerdown');
             tile.off('pointerup');
             tile.off('pointerout');
             
-            // --- HỆ THỐNG TƯƠNG TÁC ĐỘC LẬP CHO KHU VỰC CHỜ ---
-            
-            // 1. Nhấn giữ: Phóng to nhẹ lên Scale 1 và nảy lên
+            // Xử lý Input khu vực chờ
             tile.on('pointerdown', () => {
                 if (this.isAnimating) return;
                 this.tweens.add({ targets: tile, scaleX: 1, scaleY: 1, y: waitY - 10, duration: 100 });
                 tile.setDepth(200);
             });
             
-            // 2. Di chuột ra ngoài (Hủy bốc): Trả về Scale 0.8 và nằm im trên bệ chờ
             tile.on('pointerout', () => {
                 if (this.isAnimating) return;
                 this.tweens.add({ targets: tile, scaleX: 0.8, scaleY: 0.8, y: waitY, duration: 100 });
-                tile.setDepth(150 + index); // Trả về depth khu chờ
+                tile.setDepth(150 + indexTrongKhuCho);
             });
             
-            // 3. Nhả chuột (Quyết định đưa lại xuống khay)
             tile.on('pointerup', () => {
                 if (this.isAnimating) return;
-                // Bỏ nó khỏi mảng chờ
+                
+                // Trả bài về khay
                 this.waitArea = this.waitArea.filter(t => t !== tile);
-                // Phục hồi Scale gốc để bay xuống khay không bị nhỏ
                 tile.scaleX = 1; 
                 tile.scaleY = 1; 
-                // Gọi hàm bốc bài nhét lại vào Khay
                 this.onTileSelected(tile); 
             });
 
-            // Tween bay từ Khay lên Khu vực chờ
+            // Tween bay lên bệ
             this.tweens.add({
                 targets: tile,
                 x: waitX, 
                 y: waitY, 
-                scaleX: 0.8, scaleY: 0.8, // Thu nhỏ lại cho gọn
+                scaleX: 0.8, scaleY: 0.8, 
                 duration: 300,
                 ease: 'Cubic.easeOut',
             });
         });
 
-        // Dồn toa lại Khay sau khi cắt 3 lá
+        // Dồn toa lại Khay sau khi bốc
         this.time.delayedCall(300, () => {
             if (this.slotBar.length > 0) {
                 this.rearrangeSlotBar(); 
